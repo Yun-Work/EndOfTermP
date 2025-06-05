@@ -60,13 +60,14 @@ def get_symptom_stats():
         db = SessionLocal()
         query = text("""
             SELECT 
-                DATE(create_date) as date, 
+                DATE(CreateDate) as date, 
                 COUNT(*) as count
             FROM symptom_log
-            WHERE YEAR(create_date) = :year AND MONTH(create_date) = :month
-            GROUP BY DATE(create_date)
-            ORDER BY DATE(create_date)
+            WHERE YEAR(CreateDate) = :year AND MONTH(CreateDate) = :month
+            GROUP BY DATE(CreateDate)
+            ORDER BY DATE(CreateDate)
         """)
+
         results = db.execute(query, {"year": int(year), "month": int(month)}).fetchall()
         db.close()
 
@@ -76,14 +77,49 @@ def get_symptom_stats():
         return jsonify({"error": str(e)}), 500
 
 
-
 @symptom_bp.route("/symptoms/summary", methods=["GET"])
 def symptom_summary():
+    year = request.args.get("year", type=int)
+    month = request.args.get("month", type=int)
+
+    if not year or not month:
+        return jsonify({"error": "year 和 month 為必填參數"}), 400
+
     db = SessionLocal()
     try:
-        # 統計每種症狀的次數
-        results = db.query(SymptomLog.Name, func.count(SymptomLog.ID)).group_by(SymptomLog.Name).all()
+        results = db.query(
+            SymptomLog.Name,
+            func.count(SymptomLog.ID)
+        ).filter(
+            func.YEAR(SymptomLog.CreateDate) == year,
+            func.MONTH(SymptomLog.CreateDate) == month
+        ).group_by(SymptomLog.Name).all()
+
         summary = [{"name": name, "count": count} for name, count in results]
         return jsonify(summary)
+    finally:
+        db.close()
+
+
+@symptom_bp.route("/symptoms/logs", methods=["GET"])
+def get_symptom_logs():
+    year = request.args.get("year", type=int)
+    month = request.args.get("month", type=int)
+
+    if not year or not month:
+        return jsonify({"error": "year 和 month 為必填參數"}), 400
+
+    db = SessionLocal()
+    try:
+        results = db.query(SymptomLog).filter(
+            func.YEAR(SymptomLog.CreateDate) == year,
+            func.MONTH(SymptomLog.CreateDate) == month
+        ).order_by(SymptomLog.CreateDate.desc()).all()
+
+        return jsonify([
+            {"date": str(r.CreateDate), "name": r.Name} for r in results
+        ])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         db.close()
